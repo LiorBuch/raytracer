@@ -5,10 +5,12 @@ import numpy as np
 from camera import Camera
 from light import Light
 from material import Material
+from scene_builder import SceneBuilder
 from scene_settings import SceneSettings
 from surfaces.cube import Cube
 from surfaces.infinite_plane import InfinitePlane
 from surfaces.sphere import Sphere
+from ray import Ray
 
 
 def parse_scene_file(file_path):
@@ -65,10 +67,9 @@ def main():
     # Parse the scene file
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
 
-    # TODO: Implement the ray tracer
+    scene = SceneBuilder(camera, scene_settings, objects)
 
-    # Dummy result
-    image_array = np.zeros((500, 500, 3))
+    image_array = scene.create_scene() #np.zeros((500, 500, 3))
 
     # Save the output image
     save_image(image_array)
