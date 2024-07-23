@@ -66,10 +66,12 @@ def main():
 
     # Parse the scene file
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
-
+    shapes = []
+    for obj in objects:
+        if isinstance(obj, (Cube, Sphere, InfinitePlane)):
+            shapes.append(obj)
     scene = SceneBuilder(camera, scene_settings, objects)
-
-    image_array = scene.create_scene() #np.zeros((500, 500, 3))
+    image_array = scene.create_scene()  # np.zeros((500, 500, 3))
 
     # Save the output image
     save_image(image_array)
