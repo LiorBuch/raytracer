@@ -79,6 +79,11 @@ class SceneBuilder:
         self.pop_grid = pop_list
 
     # not in use for now
+    """
+    new idea, instead of 3D matrix, a flat list of the voxels, each element in the list will represent x,y,z and
+    delta(x,y,z)
+    they dont need to be aligned, yet the problem is finding the next voxel.
+    """
     def divide_voxel(self, voxel, dx, dy, dz):
         sub_grid = voxel
         for obj in self.objects:
