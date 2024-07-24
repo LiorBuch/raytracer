@@ -4,6 +4,8 @@ from surfaces.shape import Shape
 
 
 class Sphere(Shape):
+    def get_factor(self):
+        return self.radius
     def __init__(self, position, radius, material_index):
         self.position = position
         self.radius = radius

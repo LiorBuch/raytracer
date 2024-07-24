@@ -27,8 +27,12 @@ class Ray:
                 # Assuming that each hit object has another distance - maybe should change in the future
                 options[distance] = (obj, pos)
         if 0 == len(options.keys()):
-            return None
-        return options[min(options.keys())]
+            return self.pixel_coords, (0, 0, 0)
+        else:
+            minimizer = options[min(options.keys())]
+            hit_pos = minimizer[0].get_intersection_point(self)  # TODO we also need to find the angle of the hit
+
+        return self.pixel_coords
 
     def compute_triangle(self):
         pass

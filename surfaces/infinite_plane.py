@@ -4,6 +4,9 @@ from surfaces.shape import Shape
 
 
 class InfinitePlane(Shape):
+    def get_factor(self):
+        pass
+
     def __init__(self, normal, offset, material_index):
         self.normal = normal
         self.offset = offset

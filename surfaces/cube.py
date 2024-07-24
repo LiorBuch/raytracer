@@ -4,9 +4,12 @@ from surfaces.shape import Shape
 
 
 class Cube(Shape):
+    def get_factor(self):
+        return self.scale
+
     def __init__(self, position, scale, material_index):
         self.position = position
-        self.scale = scale
+        self.scale = scale/2.0
         self.material_index = material_index
 
     def get_intersection_point(self, ray: Ray) -> (bool, np.array):

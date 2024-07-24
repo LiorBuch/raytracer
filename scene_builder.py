@@ -4,6 +4,9 @@ from ray import Ray
 from scene_settings import SceneSettings
 import concurrent.futures
 
+from surfaces.cube import Cube
+from surfaces.sphere import Sphere
+
 
 class SceneBuilder:
     def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list):
@@ -14,6 +17,7 @@ class SceneBuilder:
         self.pop_grid = None
         self.width = self.camera.screen_width
         self.height = 200  # TODO figure out aspect
+        self.create_subdivision_grid()
 
     def create_scene(self) -> np.array:
         img = np.zeros(())
@@ -84,6 +88,7 @@ class SceneBuilder:
     delta(x,y,z)
     they dont need to be aligned, yet the problem is finding the next voxel.
     """
+
     def divide_voxel(self, voxel, dx, dy, dz):
         sub_grid = voxel
         for obj in self.objects:
@@ -94,7 +99,26 @@ class SceneBuilder:
     def populate_grid(self, voxel, dx, dy, dz):
         pop_list = []
         for obj in self.objects:
-            if obj.position[2] in (voxel[2], voxel[2] + dz) and obj.position[0] in (voxel[0], voxel[0] + dx) and \
-                    obj.position[1] in (voxel[1], voxel[1] + dy):
-                pop_list.append(obj)
+            if isinstance(obj, Cube):
+                cube_max_x, cube_max_y, cube_max_z = obj.position + obj.scale
+                cube_min_x, cube_min_y, cube_min_z = obj.position - obj.scale
+                if self.is_overlapping((cube_min_x, cube_min_y, cube_min_z), (cube_max_x, cube_max_y, cube_max_z),
+                                       voxel, (voxel[0] + dx, voxel[1] + dy, voxel[2] + dz)):
+                    pop_list.append(obj)
+            elif isinstance(obj, Sphere):
+                sphere_max_x, sphere_max_y, sphere_max_z = obj.position + obj.radius
+                sphere_min_x, sphere_min_y, sphere_min_z = obj.position - obj.radius
+                if self.is_overlapping((sphere_min_x, sphere_min_y, sphere_min_z),
+                                       (sphere_max_x, sphere_max_y, sphere_max_z),
+                                       voxel, (voxel[0] + dx, voxel[1] + dy, voxel[2] + dz)):
+                    pop_list.append(obj)
         return pop_list
+
+    def is_overlapping(self, a_min, a_max, b_min, b_max):
+        if a_max[0] < b_min[0] or a_min[0] > b_max[0]:
+            return False
+        if a_max[1] < b_min[1] or a_min[1] > b_max[1]:
+            return False
+        if a_max[2] < b_min[2] or a_min[2] > b_max[2]:
+            return False
+        return True
