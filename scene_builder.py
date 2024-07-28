@@ -15,55 +15,62 @@ from material import Material
 
 class SceneBuilder:
     def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list):
+
         self.camera = camera
-        self.max_workers = 2
+        self.max_workers = 6
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
         self.materials = [mat for mat in objects if isinstance(mat, Material)]
         self.voxel_grid = None
         self.pop_grid = None
-        self.width = 200 # int(self.camera.screen_width)
-        self.height = 200  # TODO figure out aspect
+        self.width = 300 # int(self.camera.screen_width)
+        self.height = 300  # TODO figure out aspect
         self.create_subdivision_grid()
-
+        manager = mp.Manager()
+        self.iterations = manager.Value('i', 0)
+        self.lock = manager.Lock()
+        print(f"time for building scene: {9.5 * self.width * self.height / 100}")
 
     def create_scene(self) -> np.array:
         manager = mp.Manager()
         image_counter = manager.Value('i', 0)
-        img = np.zeros((self.height,self.width,3))
+        img = np.zeros((self.height, self.width, 3))
         width = self.width
         height = self.height
 
         # img = [self.ray_task( int(i / height), i % width) for i in range(height * width)]
 
-
-
         with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            tasks = [executor.submit(self.ray_task, int(i / height), i % width, image_counter) for i in range(height * width)]
+            tasks = [executor.submit(self.ray_task, int(i / width), i % width, self.lock, self.iterations) for i in
+                     range(height * width)]
             for future in concurrent.futures.as_completed(tasks):
                 x, y, color = future.result()
                 img[x, y, :] = color
 
         return img
 
-    def ray_task(self, pixel_i, pixel_j, image_counter):
+    def ray_task(self, pixel_i, pixel_j, lock, iterations):
+
         camera_dir = self.camera.look_at - self.camera.position
         camera_dir /= np.linalg.norm(camera_dir)
         camera_dir *= self.camera.screen_distance
 
-        height_dir = (self.camera.up_vector)*(self.height/2)# - (self.height - pixel_i))/self.height
+        height_dir = (self.camera.up_vector) * ((self.height / 2) - pixel_i)
         width_dir = -np.linalg.cross(camera_dir, self.camera.up_vector)
-        width_dir = width_dir / np.linalg.norm(width_dir) *(self.width/2)
+        width_dir = (width_dir / np.linalg.norm(width_dir)) * ((self.width / 2) - pixel_j)
         screen_dir = height_dir + width_dir
         pixel_dir = camera_dir + screen_dir
         ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position)
-        rgb = ray.shoot(self.objects, self.lights, self.materials)
-        print(f"Calculated {rgb}")
-        print(f"Direction -> ")
-        #with image_counter.get_lock():
-        #    image_counter.value += 1
-        #    print(f"pixels left: {self.width*self.height - image_counter.value}")
+        (x, y), rgb = ray.shoot(self.objects, self.lights, self.materials)
+        with lock:
+            iterations.value += 1
+            print(f"Calculated {rgb}")
+            print(f"Direction -> {pixel_dir}")
+            #if iterations.value % 100 == 0:
+            print(f"pixels left: {self.width * self.height - iterations.value}")
+            # print("")
+
         return pixel_i, pixel_j, rgb
 
     # https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-7-adaptive-tessellation-subdivision-surfaces#:~:text=Adaptive%20Subdivision&text=Instead%20of%20blindly%20subdividing%20a,the%20more%20it%20gets%20subdivided.
@@ -134,9 +141,9 @@ class SceneBuilder:
                 cube_max_x = obj.position[0] + obj.scale
                 cube_max_y = obj.position[1] + obj.scale
                 cube_max_z = obj.position[2] + obj.scale
-                cube_min_x= obj.position[0] - obj.scale
-                cube_min_y= obj.position[1] - obj.scale
-                cube_min_z= obj.position[2] - obj.scale
+                cube_min_x = obj.position[0] - obj.scale
+                cube_min_y = obj.position[1] - obj.scale
+                cube_min_z = obj.position[2] - obj.scale
                 if self.is_overlapping((cube_min_x, cube_min_y, cube_min_z), (cube_max_x, cube_max_y, cube_max_z),
                                        voxel, (voxel[0] + dx, voxel[1] + dy, voxel[2] + dz)):
                     pop_list.append(obj)
@@ -144,9 +151,9 @@ class SceneBuilder:
                 sphere_max_x = obj.position[0] + obj.radius
                 sphere_max_y = obj.position[1] + obj.radius
                 sphere_max_z = obj.position[2] + obj.radius
-                sphere_min_x = obj.position[0]- obj.radius
-                sphere_min_y = obj.position[1]- obj.radius
-                sphere_min_z = obj.position[2]- obj.radius
+                sphere_min_x = obj.position[0] - obj.radius
+                sphere_min_y = obj.position[1] - obj.radius
+                sphere_min_z = obj.position[2] - obj.radius
                 if self.is_overlapping((sphere_min_x, sphere_min_y, sphere_min_z),
                                        (sphere_max_x, sphere_max_y, sphere_max_z),
                                        voxel, (voxel[0] + dx, voxel[1] + dy, voxel[2] + dz)):

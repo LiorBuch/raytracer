@@ -32,7 +32,7 @@ class Ray:
             return self.pixel_coords, (0, 0, 0)
 
         minimizer = options[min(options.keys())]
-        hit_pos = minimizer[0].get_intersection_point(self)  # TODO we also need to find the angle of the hit
+        hit_pos = minimizer[1]#minimizer[0].get_intersection_point(self)  # TODO we also need to find the angle of the hit
         # process the hit here --->
         diffusive_color = np.array([0.0,0.0,0.0])
         for light in lights:
@@ -43,7 +43,7 @@ class Ray:
         # shade
         # snells
         # continue to the next ray if needed
-        return diffusive_color #self.pixel_coords
+        return self.pixel_coords , diffusive_color #self.pixel_coords
 
     def snells_law(self,hit_pos,enter:bool,obj):
         glass_media = 1.58
