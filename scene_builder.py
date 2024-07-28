@@ -9,6 +9,7 @@ from surfaces.infinite_plane import InfinitePlane
 from surfaces.sphere import Sphere
 from surfaces.shape import Shape
 
+from numba import cuda
 from light import Light
 from material import Material
 
@@ -17,15 +18,16 @@ class SceneBuilder:
     def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list):
 
         self.camera = camera
-        self.max_workers = 6
+        self.max_workers = 12
+        self.batch = 100
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
         self.materials = [mat for mat in objects if isinstance(mat, Material)]
         self.voxel_grid = None
         self.pop_grid = None
-        self.width = 300 # int(self.camera.screen_width)
-        self.height = 300  # TODO figure out aspect
+        self.width = 100  # int(self.camera.screen_width)
+        self.height = 100  # TODO figure out aspect
         self.create_subdivision_grid()
         manager = mp.Manager()
         self.iterations = manager.Value('i', 0)
@@ -33,22 +35,87 @@ class SceneBuilder:
         print(f"time for building scene: {9.5 * self.width * self.height / 100}")
 
     def create_scene(self) -> np.array:
-        manager = mp.Manager()
-        image_counter = manager.Value('i', 0)
         img = np.zeros((self.height, self.width, 3))
-        width = self.width
-        height = self.height
-
-        # img = [self.ray_task( int(i / height), i % width) for i in range(height * width)]
 
         with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            tasks = [executor.submit(self.ray_task, int(i / width), i % width, self.lock, self.iterations) for i in
-                     range(height * width)]
+            tasks = [executor.submit(self.ray_task, int(i / self.width), i % self.width, self.lock, self.iterations)
+                     for i in range(self.height * self.width)]
             for future in concurrent.futures.as_completed(tasks):
                 x, y, color = future.result()
                 img[x, y, :] = color
 
         return img
+
+    def create_scene_batch(self) -> np.array:
+        img = np.zeros((self.height, self.width, 3))
+        param = [(self.ray_task, int(i / self.width), i % self.width) for i in
+                 range(self.height * self.width)]
+        param_batch = []
+        for i in range(0, len(param), self.batch):
+            param_batch.append(param[i:i + self.batch])
+        with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+            tasks = [executor.submit(self.ray_task_batched, batcher) for batcher in param_batch]
+            for future in concurrent.futures.as_completed(tasks):
+                data,_ = future.result()
+
+                color = np.array(data[:][1])
+                img[data[0][0]:data[-1][0], data[0][1]:data[-1][1], :] = color
+
+        return img
+
+
+    def cuda_create_scene(self):
+        materials = np.array(self.materials)
+        img = np.zeros((self.height, self.width, 3), dtype=np.float32)
+
+        d_image = cuda.to_device(img)
+        d_materials = cuda.to_device(materials)
+
+        threads_per_block = (16, 16)
+        blocks_per_grid = (self.width // threads_per_block[0] + 1, self.height // threads_per_block[1] + 1)
+
+        self.cuda_ray_task[blocks_per_grid, threads_per_block](d_image, d_materials)
+
+        d_image.copy_to_host(img)
+        return img
+
+    @staticmethod
+    @cuda.jit
+    def cuda_ray_task(img, materials):
+        x, y = cuda.grid(2)
+        if x >= img.shape[1] or y >= img.shape[0]:
+            return
+
+        ray_origin = np.array([0, 0, 0], dtype=np.float32)  # Example camera position
+        ray_direction = np.array([x - img.shape[1] / 2, y - img.shape[0] / 2, 1], dtype=np.float32)
+        ray_direction /= np.linalg.norm(ray_direction)
+        color = np.zeros(3, dtype=np.float32)
+
+        # Iterate through objects in the scene
+        for obj_idx in range(len(materials)):  # Assuming each material corresponds to an object
+            # Example: replace with actual intersection calculation
+            t = obj_idx  # This is just a placeholder. Replace with actual intersection check.
+            if t:
+                color = materials[obj_idx]
+                break  # Break on first hit for simplicity
+
+        img[y, x] = color
+
+    @staticmethod
+    def intersect_sphere(ray_origin, ray_direction, sphere):
+        # Calculate intersection
+        oc = ray_origin - sphere.center
+        a = np.dot(ray_direction, ray_direction)
+        b = 2.0 * np.dot(oc, ray_direction)
+        c = np.dot(oc, oc) - sphere.radius * sphere.radius
+        discriminant = b * b - 4 * a * c
+        if discriminant < 0:
+            return None
+        else:
+            t = (-b - np.sqrt(discriminant)) / (2.0 * a)
+            if t < 0:
+                return None
+            return t
 
     def ray_task(self, pixel_i, pixel_j, lock, iterations):
 
@@ -65,13 +132,28 @@ class SceneBuilder:
         (x, y), rgb = ray.shoot(self.objects, self.lights, self.materials)
         with lock:
             iterations.value += 1
-            print(f"Calculated {rgb}")
-            print(f"Direction -> {pixel_dir}")
-            #if iterations.value % 100 == 0:
-            print(f"pixels left: {self.width * self.height - iterations.value}")
+            # print(f"Calculated {rgb}")
+            # print(f"Direction -> {pixel_dir}")
+            if iterations.value % 100 == 0:
+                print(f"pixels left: {self.width * self.height - iterations.value}")
             # print("")
 
         return pixel_i, pixel_j, rgb
+
+    def ray_task_batched(self,params):
+        camera_dir = self.camera.look_at - self.camera.position
+        camera_dir /= np.linalg.norm(camera_dir)
+        camera_dir *= self.camera.screen_distance
+        data = []
+        for pixel_i,pixel_j in params:
+            height_dir = (self.camera.up_vector) * ((self.height / 2) - pixel_i)
+            width_dir = -np.linalg.cross(camera_dir, self.camera.up_vector)
+            width_dir = (width_dir / np.linalg.norm(width_dir)) * ((self.width / 2) - pixel_j)
+            screen_dir = height_dir + width_dir
+            pixel_dir = camera_dir + screen_dir
+            ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position)
+            data.append(ray.shoot(self.objects, self.lights, self.materials))
+        return data
 
     # https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-7-adaptive-tessellation-subdivision-surfaces#:~:text=Adaptive%20Subdivision&text=Instead%20of%20blindly%20subdividing%20a,the%20more%20it%20gets%20subdivided.
     def create_subdivision_grid(self):
