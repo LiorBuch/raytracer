@@ -3,39 +3,67 @@ from camera import Camera
 from ray import Ray
 from scene_settings import SceneSettings
 import concurrent.futures
-
+import multiprocessing as mp
 from surfaces.cube import Cube
+from surfaces.infinite_plane import InfinitePlane
 from surfaces.sphere import Sphere
+from surfaces.shape import Shape
+
+from light import Light
+from material import Material
 
 
 class SceneBuilder:
     def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list):
         self.camera = camera
+        self.max_workers = 2
         self.scene_settings = scene_settings
-        self.objects = objects
+        self.objects = [obj for obj in objects if isinstance(obj, Shape)]
+        self.lights = [light for light in objects if isinstance(light, Light)]
+        self.materials = [mat for mat in objects if isinstance(mat, Material)]
         self.voxel_grid = None
         self.pop_grid = None
-        self.width = self.camera.screen_width
+        self.width = 200 # int(self.camera.screen_width)
         self.height = 200  # TODO figure out aspect
         self.create_subdivision_grid()
 
+
     def create_scene(self) -> np.array:
-        img = np.zeros(())
+        manager = mp.Manager()
+        image_counter = manager.Value('i', 0)
+        img = np.zeros((self.height,self.width,3))
         width = self.width
         height = self.height
 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=5) as executor:
-            tasks = [executor.submit(self.ray_task, int(i / height), i % width) for i in range(height * width)]
+        # img = [self.ray_task( int(i / height), i % width) for i in range(height * width)]
+
+
+
+        with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+            tasks = [executor.submit(self.ray_task, int(i / height), i % width, image_counter) for i in range(height * width)]
             for future in concurrent.futures.as_completed(tasks):
                 x, y, color = future.result()
                 img[x, y, :] = color
 
-    def ray_task(self, pixel_i, pixel_j):
-        camera_dir = np.linalg.norm(self.camera.look_at - self.camera.position)
-        screen_dir = np.linalg.norm((self.height / 2, self.width / 2) - (pixel_i, pixel_j))
+        return img
+
+    def ray_task(self, pixel_i, pixel_j, image_counter):
+        camera_dir = self.camera.look_at - self.camera.position
+        camera_dir /= np.linalg.norm(camera_dir)
+        camera_dir *= self.camera.screen_distance
+
+        height_dir = (self.camera.up_vector)*(self.height/2)# - (self.height - pixel_i))/self.height
+        width_dir = -np.linalg.cross(camera_dir, self.camera.up_vector)
+        width_dir = width_dir / np.linalg.norm(width_dir) *(self.width/2)
+        screen_dir = height_dir + width_dir
         pixel_dir = camera_dir + screen_dir
         ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position)
-        rgb = ray.shoot(self.objects)
+        rgb = ray.shoot(self.objects, self.lights, self.materials)
+        print(f"Calculated {rgb}")
+        print(f"Direction -> ")
+        #with image_counter.get_lock():
+        #    image_counter.value += 1
+        #    print(f"pixels left: {self.width*self.height - image_counter.value}")
         return pixel_i, pixel_j, rgb
 
     # https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-7-adaptive-tessellation-subdivision-surfaces#:~:text=Adaptive%20Subdivision&text=Instead%20of%20blindly%20subdividing%20a,the%20more%20it%20gets%20subdivided.
@@ -44,8 +72,11 @@ class SceneBuilder:
         min_x, min_y, min_z = (-1, -1, -1)
         max_x, max_y, max_z = (-1, -1, -1)
         for obj in self.objects:
-            test_min = obj.position - obj.radius
-            test_max = obj.position + obj.radius
+            if isinstance(obj, InfinitePlane):
+                continue
+
+            test_min = np.array(obj.position) - obj.get_factor()
+            test_max = np.array(obj.position) + obj.get_factor()
             if (test_min[0] < min_x):
                 min_x = test_min[0]
             if (test_min[1] < min_y):
@@ -65,7 +96,7 @@ class SceneBuilder:
                    min_z + (max_z - min_z) * k / division_factor]
                   for i in range(0, division_factor + 1)] for j in range(0, division_factor + 1)] for k in
                 range(0, division_factor + 1)]
-        with concurrent.futures.ProcessPoolExecutor(max_workers=5) as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
             flat_grid = [voxel for subgrid1 in grid for subgrid2 in subgrid1 for voxel in subgrid2]
             futures = [
                 executor.submit(self.populate_grid, voxel, max_x - min_x, max_y - min_y, max_z - min_z) for voxel in
@@ -100,17 +131,31 @@ class SceneBuilder:
         pop_list = []
         for obj in self.objects:
             if isinstance(obj, Cube):
-                cube_max_x, cube_max_y, cube_max_z = obj.position + obj.scale
-                cube_min_x, cube_min_y, cube_min_z = obj.position - obj.scale
+                cube_max_x = obj.position[0] + obj.scale
+                cube_max_y = obj.position[1] + obj.scale
+                cube_max_z = obj.position[2] + obj.scale
+                cube_min_x= obj.position[0] - obj.scale
+                cube_min_y= obj.position[1] - obj.scale
+                cube_min_z= obj.position[2] - obj.scale
                 if self.is_overlapping((cube_min_x, cube_min_y, cube_min_z), (cube_max_x, cube_max_y, cube_max_z),
                                        voxel, (voxel[0] + dx, voxel[1] + dy, voxel[2] + dz)):
                     pop_list.append(obj)
             elif isinstance(obj, Sphere):
-                sphere_max_x, sphere_max_y, sphere_max_z = obj.position + obj.radius
-                sphere_min_x, sphere_min_y, sphere_min_z = obj.position - obj.radius
+                sphere_max_x = obj.position[0] + obj.radius
+                sphere_max_y = obj.position[1] + obj.radius
+                sphere_max_z = obj.position[2] + obj.radius
+                sphere_min_x = obj.position[0]- obj.radius
+                sphere_min_y = obj.position[1]- obj.radius
+                sphere_min_z = obj.position[2]- obj.radius
                 if self.is_overlapping((sphere_min_x, sphere_min_y, sphere_min_z),
                                        (sphere_max_x, sphere_max_y, sphere_max_z),
                                        voxel, (voxel[0] + dx, voxel[1] + dy, voxel[2] + dz)):
+                    pop_list.append(obj)
+            elif isinstance(obj, InfinitePlane):
+                # If the normal of the plane * vector from the camera to that plane = 0,
+                # the plane will not be seen in the final image -> So consider adding this logic
+                point_on_plane = obj.get_point_on_plane()
+                if np.dot(point_on_plane - self.camera.position, obj.normal) != 0:
                     pop_list.append(obj)
         return pop_list
 

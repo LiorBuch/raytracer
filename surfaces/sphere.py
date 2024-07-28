@@ -6,7 +6,9 @@ from surfaces.shape import Shape
 class Sphere(Shape):
     def get_factor(self):
         return self.radius
+
     def __init__(self, position, radius, material_index):
+        super(Sphere).__init__()
         self.position = position
         self.radius = radius
         self.material_index = material_index

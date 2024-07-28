@@ -8,6 +8,7 @@ class Cube(Shape):
         return self.scale
 
     def __init__(self, position, scale, material_index):
+        super(Cube).__init__()
         self.position = position
         self.scale = scale/2.0
         self.material_index = material_index
