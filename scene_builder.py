@@ -18,8 +18,8 @@ class SceneBuilder:
     def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list):
 
         self.camera = camera
-        self.max_workers = 6
-        self.batch = 300
+        self.max_workers = 20
+        self.batch = 1000
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
@@ -32,11 +32,9 @@ class SceneBuilder:
         manager = mp.Manager()
         self.iterations = manager.Value('i', 0)
         self.lock = manager.Lock()
-        print(f"time for building scene: {9.5 * self.width * self.height / 100}")
 
     def create_scene(self) -> np.array:
         img = np.zeros((self.height, self.width, 3))
-
         with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
             tasks = [executor.submit(self.ray_task, int(i / self.width), i % self.width, self.lock, self.iterations)
                      for i in range(self.height * self.width)]
@@ -47,6 +45,13 @@ class SceneBuilder:
         return img
 
     def create_scene_batch(self) -> np.array:
+        print("<---- Starting to calculate ---->")
+        print(f"Batch size: {self.batch}")
+        print(f"Total pixels: {self.width * self.height}")
+        print(f"Total Batches: {self.width * self.height /self.batch}")
+        print(f"Max workers:{self.max_workers}")
+        print(f"Batches per worker: {(self.width*self.height / self.batch)/self.max_workers}")
+        print("<------------------------------->\n")
         num_pixels = self.width * self.height
         img = np.zeros((num_pixels, 3))
         num_of_full_blocks = num_pixels // self.batch
@@ -162,7 +167,6 @@ class SceneBuilder:
             pixel_dir = camera_dir + screen_dir
             ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position)
             data.append(ray.shoot(self.objects, self.lights, self.materials)[1])
-        print("batch ready")
         return data, (s, e)
 
     # https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-7-adaptive-tessellation-subdivision-surfaces#:~:text=Adaptive%20Subdivision&text=Instead%20of%20blindly%20subdividing%20a,the%20more%20it%20gets%20subdivided.
