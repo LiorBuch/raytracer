@@ -35,15 +35,19 @@ class Ray:
         hit_pos = minimizer[1]#minimizer[0].get_intersection_point(self)  # TODO we also need to find the angle of the hit
         # process the hit here --->
         diffusive_color = np.array([0.0,0.0,0.0])
+        specular_color = np.array([0.0,0.0,0.0])
+        bg_color = np.array([1.0,1.0,1.0])
         for light in lights:
+            # diffuse
             diffusive_color += np.array(self.diffuse_color(light, materials[minimizer[0].material_index-1]))*255
-        # diffuse
-        # specular
+            # specular the normal is not good
+            specular_color += np.array(self.specular_color(self.pos,np.array([0, 1, 0]),light,materials[minimizer[0].material_index-1],hit_pos))
+
         # phong
         # shade
         # snells
         # continue to the next ray if needed
-        return self.pixel_coords , diffusive_color #self.pixel_coords
+        return self.pixel_coords , (bg_color*materials[minimizer[0].material_index-1].transparency+(diffusive_color+specular_color)*(1-materials[minimizer[0].material_index-1].transparency)) #self.pixel_coords
 
     def snells_law(self,hit_pos,enter:bool,obj):
         glass_media = 1.58
@@ -61,6 +65,31 @@ class Ray:
     def diffuse_color(self,light:Light,hit_obj_mat:Material):
         color = hit_obj_mat.diffuse_color * light.color
         return color
+
+    def specular_color(self, view_pos, surface_normal , light:Light,mat:Material,hit_pos):
+        def normalize(v):
+            norm = np.linalg.norm(v)
+            return v / norm if norm != 0 else v
+
+        # Normalize vectors
+        light_vec = normalize(light.position - hit_pos)
+        view_vec = normalize(view_pos - hit_pos)
+        normal_vec = normalize(surface_normal)
+
+        # Compute reflection vector R
+        reflection_vec = 2 * np.dot(light_vec, normal_vec) * normal_vec - light_vec
+        reflection_vec = normalize(reflection_vec)
+
+        # Compute dot product R.V and clamp to 0 if negative
+        dot_rv = max(np.dot(reflection_vec, view_vec), 0)
+
+        # Calculate the specular component
+        specular_component = mat.specular_color * (dot_rv ** mat.shininess)
+
+        # Specular color
+        specular_color = light.color * specular_component
+
+        return specular_color
 
     def shadow_ray(self):
         pass

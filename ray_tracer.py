@@ -4,6 +4,7 @@ import time
 from PIL import Image
 import numpy as np
 
+from batched_scene_builder import BatchedSceneBuilder
 from camera import Camera
 from light import Light
 from material import Material
@@ -55,7 +56,7 @@ def save_image(image_array):
     image = Image.fromarray(np.uint8(image_array))
 
     # Save the image to a file
-    image.save("output/simple.png")
+    image.save("output/simple_plus.png")
 
 
 def main():
@@ -69,7 +70,7 @@ def main():
     # Parse the scene file
     t = time.time()
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
-    scene = SceneBuilder(camera, scene_settings, objects)
+    scene = BatchedSceneBuilder(camera, scene_settings, objects)
     image_array = scene.create_scene_batch() # np.zeros((500, 500, 3))
     print(f"total time: {time.time()-t}")
     # Save the output image
@@ -78,4 +79,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-#711
