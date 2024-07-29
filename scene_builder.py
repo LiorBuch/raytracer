@@ -19,15 +19,15 @@ class SceneBuilder:
 
         self.camera = camera
         self.max_workers = 6
-        self.batch = 9
+        self.batch = 300
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
         self.materials = [mat for mat in objects if isinstance(mat, Material)]
         self.voxel_grid = None
         self.pop_grid = None
-        self.width = 10  # int(self.camera.screen_width)
-        self.height = 10  # TODO figure out aspect
+        self.width = 500  # int(self.camera.screen_width)
+        self.height = 500  # TODO figure out aspect
         self.create_subdivision_grid()
         manager = mp.Manager()
         self.iterations = manager.Value('i', 0)
