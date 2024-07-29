@@ -155,16 +155,30 @@ class SceneBuilder:
         return pixel_i, pixel_j, rgb
 
     def ray_task_batched(self, params, s, e):
-        camera_dir = self.camera.look_at - self.camera.position
-        camera_dir /= np.linalg.norm(camera_dir)
-        camera_dir *= self.camera.screen_distance
+        def normalize(v):
+            norm = np.linalg.norm(v)
+            return v / norm if norm != 0 else v
+
+        camera_dir = normalize(self.camera.look_at - self.camera.position)
+        up_vector = normalize(np.cross(camera_dir,self.camera.up_vector))
+        right_vector = normalize(np.cross(camera_dir, up_vector))
+        screen_center = self.camera.position + camera_dir * self.camera.screen_distance
+        screen_height = self.camera.screen_width / 1
+
         data = []
         for pixel_i, pixel_j in params:
-            height_dir = (self.camera.up_vector) * ((self.height / 2) - pixel_i)
-            width_dir = -np.linalg.cross(camera_dir, self.camera.up_vector)
-            width_dir = (width_dir / np.linalg.norm(width_dir)) * ((self.width / 2) - pixel_j)
-            screen_dir = height_dir + width_dir
-            pixel_dir = camera_dir + screen_dir
+            ndc_x = (pixel_i + 0.5) / self.width # image width
+            ndc_y = (pixel_j + 0.5) / self.height # image height
+
+            # Screen coordinates [-0.5, 0.5]
+            screen_x = (2 * ndc_x - 1) * self.camera.screen_width / 2
+            screen_y = (1 - 2 * ndc_y) * screen_height / 2
+
+            # Point on the screen in 3D space
+            point_on_screen = screen_center + screen_x * right_vector + screen_y * up_vector
+
+            # Direction vector for the pixel
+            pixel_dir = normalize(point_on_screen - self.camera.position)
             ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position)
             data.append(ray.shoot(self.objects, self.lights, self.materials)[1])
         return data, (s, e)
