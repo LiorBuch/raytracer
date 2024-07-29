@@ -70,7 +70,7 @@ def main():
     t = time.time()
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
     scene = SceneBuilder(camera, scene_settings, objects)
-    image_array = scene.cuda_create_scene()  # np.zeros((500, 500, 3))
+    image_array = scene.create_scene_batch() # np.zeros((500, 500, 3))
     print(f"total time: {time.time()-t}")
     # Save the output image
     save_image(image_array)

@@ -18,16 +18,16 @@ class SceneBuilder:
     def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list):
 
         self.camera = camera
-        self.max_workers = 12
-        self.batch = 100
+        self.max_workers = 6
+        self.batch = 9
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
         self.materials = [mat for mat in objects if isinstance(mat, Material)]
         self.voxel_grid = None
         self.pop_grid = None
-        self.width = 100  # int(self.camera.screen_width)
-        self.height = 100  # TODO figure out aspect
+        self.width = 10  # int(self.camera.screen_width)
+        self.height = 10  # TODO figure out aspect
         self.create_subdivision_grid()
         manager = mp.Manager()
         self.iterations = manager.Value('i', 0)
@@ -47,22 +47,31 @@ class SceneBuilder:
         return img
 
     def create_scene_batch(self) -> np.array:
-        img = np.zeros((self.height, self.width, 3))
-        param = [(self.ray_task, int(i / self.width), i % self.width) for i in
-                 range(self.height * self.width)]
-        param_batch = []
-        for i in range(0, len(param), self.batch):
-            param_batch.append(param[i:i + self.batch])
+        num_pixels = self.width * self.height
+        img = np.zeros((num_pixels, 3))
+        num_of_full_blocks = num_pixels // self.batch
+        left_over_block = num_pixels % self.batch
+        param = []
+        for block in range(num_of_full_blocks):
+            param_batch = []
+            for i in range(block * self.batch, (block + 1) * self.batch, 1):
+                param_batch.append([int(i / self.width), i % self.width])
+            param.append([param_batch, block * self.batch, (block + 1) * self.batch])
+        if left_over_block != 0:
+            param_batch = []
+            for i in range(num_of_full_blocks * self.batch, num_of_full_blocks * self.batch + left_over_block, 1):
+                param_batch.append([int(i / self.width), i % self.width])
+            param.append(
+                [param_batch, num_of_full_blocks * self.batch, num_of_full_blocks * self.batch + left_over_block])
+
         with concurrent.futures.ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            tasks = [executor.submit(self.ray_task_batched, batcher) for batcher in param_batch]
+            tasks = [executor.submit(self.ray_task_batched, param[k][0],param[k][1] ,param[k][2]) for k in range(len(param))]
             for future in concurrent.futures.as_completed(tasks):
-                data,_ = future.result()
-
-                color = np.array(data[:][1])
-                img[data[0][0]:data[-1][0], data[0][1]:data[-1][1], :] = color
-
+                data, (batch_s, batch_e) = future.result()
+                color = np.array(data[:])
+                img[batch_s:batch_e, :] = color
+        img.resize((self.width, self.height, 3))
         return img
-
 
     def cuda_create_scene(self):
         materials = np.array(self.materials)
@@ -140,20 +149,21 @@ class SceneBuilder:
 
         return pixel_i, pixel_j, rgb
 
-    def ray_task_batched(self,params):
+    def ray_task_batched(self, params, s, e):
         camera_dir = self.camera.look_at - self.camera.position
         camera_dir /= np.linalg.norm(camera_dir)
         camera_dir *= self.camera.screen_distance
         data = []
-        for pixel_i,pixel_j in params:
+        for pixel_i, pixel_j in params:
             height_dir = (self.camera.up_vector) * ((self.height / 2) - pixel_i)
             width_dir = -np.linalg.cross(camera_dir, self.camera.up_vector)
             width_dir = (width_dir / np.linalg.norm(width_dir)) * ((self.width / 2) - pixel_j)
             screen_dir = height_dir + width_dir
             pixel_dir = camera_dir + screen_dir
             ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position)
-            data.append(ray.shoot(self.objects, self.lights, self.materials))
-        return data
+            data.append(ray.shoot(self.objects, self.lights, self.materials)[1])
+        print("batch ready")
+        return data, (s, e)
 
     # https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-7-adaptive-tessellation-subdivision-surfaces#:~:text=Adaptive%20Subdivision&text=Instead%20of%20blindly%20subdividing%20a,the%20more%20it%20gets%20subdivided.
     def create_subdivision_grid(self):
