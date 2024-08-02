@@ -73,8 +73,7 @@ class Ray:
                 reflect_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], self.reflect(self.direction, normal),
                                   hit_pos, 0, self.max_shadow_rays)
                 reflective_color += np.array(reflect_ray.shoot(objects, lights, materials)[1])
-                total_color += reflective_color * obj_mat.reflection_color
-            return self.pixel_coords, total_color
+            total_color += reflective_color * obj_mat.reflection_color
 
         # continue to the next ray if needed
         total_color = np.clip(total_color, 0, 1) * 255
