@@ -19,7 +19,7 @@ class BatchedSceneBuilder:
 
         self.camera = camera
         self.max_workers = 20
-        self.batch = 2000
+        self.batch = 500
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
