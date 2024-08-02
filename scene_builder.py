@@ -108,7 +108,7 @@ class SceneBuilder:
         width_dir = (width_dir / np.linalg.norm(width_dir)) * ((self.width / 2) - pixel_j)
         screen_dir = height_dir + width_dir
         pixel_dir = camera_dir + screen_dir
-        ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position)
+        ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position,self.scene_settings.max_recursions,self.scene_settings.root_number_shadow_rays)
         (x, y), rgb = ray.shoot(self.objects, self.lights, self.materials)
         with lock:
             iterations.value += 1

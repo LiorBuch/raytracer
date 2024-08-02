@@ -1,5 +1,4 @@
 import numpy as np
-from ray import Ray
 from surfaces.shape import Shape
 
 
@@ -13,7 +12,7 @@ class Sphere(Shape):
         self.radius = radius
         self.material_index = material_index
 
-    def get_intersection_point(self, ray: Ray) -> (bool, np.array):
+    def get_intersection_point(self, ray) -> (bool, np.array):
         start_point = ray.pos
         direction = ray.direction
         # According to lecture 7, page 39

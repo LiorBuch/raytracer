@@ -6,3 +6,4 @@ class Light:
         self.specular_intensity = specular_intensity
         self.shadow_intensity = shadow_intensity
         self.radius = radius
+
