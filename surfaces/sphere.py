@@ -12,9 +12,7 @@ class Sphere(Shape):
         self.radius = radius
         self.material_index = material_index
 
-    def get_intersection_point(self, ray) -> (bool, np.array):
-        start_point = ray.pos
-        direction = ray.direction
+    def get_intersection_point(self, start_point,direction) -> (bool, np.array):
         # According to lecture 7, page 39
         a = 1
         b = 2 * np.dot(direction, (start_point - self.position))

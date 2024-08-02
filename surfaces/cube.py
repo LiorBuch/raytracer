@@ -12,9 +12,7 @@ class Cube(Shape):
         self.scale = scale/2.0
         self.material_index = material_index
 
-    def get_intersection_point(self, ray) -> (bool, np.array):
-        start_point = ray.pos
-        direction = ray.direction
+    def get_intersection_point(self, start_point,direction) -> (bool, np.array):
         # According to ChatGPT
         half_scale = self.scale / 2.0
 

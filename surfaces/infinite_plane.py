@@ -14,9 +14,8 @@ class InfinitePlane(Shape):
         self.offset = offset
         self.material_index = material_index
 
-    def get_intersection_point(self, ray) -> (bool, np.array):
-        start_point = ray.pos
-        direction = ray.direction
+    def get_intersection_point(self, start_point,direction) -> (bool, np.array):
+
         if np.dot(direction, self.normal) == 0:
             return False, np.array([0, 0, 0])
         # Since the formula of the plane is P * N = c, not P * N + c = 0

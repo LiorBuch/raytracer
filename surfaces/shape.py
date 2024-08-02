@@ -6,7 +6,7 @@ class Shape(ABC):
         self.material_index = -1
 
     @abstractmethod
-    def get_intersection_point(self, ray):
+    def get_intersection_point(self, start_point,direction):
         pass
 
     @abstractmethod

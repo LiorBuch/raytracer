@@ -19,7 +19,7 @@ class BatchedSceneBuilder:
 
         self.camera = camera
         self.max_workers = 20
-        self.batch = 1000
+        self.batch = 2000
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
@@ -28,6 +28,7 @@ class BatchedSceneBuilder:
         self.pop_grid = None
         self.width = 500  # int(self.camera.screen_width)
         self.height = 500  # TODO figure out aspect
+        self.total_pixels = self.width*self.height
         self.create_subdivision_grid()
         manager = mp.Manager()
         self.iterations = manager.Value('i', 0)
@@ -36,11 +37,15 @@ class BatchedSceneBuilder:
     def print_info(self):
         print("<---- Batch Ray Tracing Info ---->")
 
+
         print(f"Batch size: {self.batch}")
         print(f"Total pixels: {self.width * self.height}")
         print(f"Total Batches: {self.width * self.height / self.batch}")
         print(f"Max workers:{self.max_workers}")
         print(f"Batches per worker: {(self.width * self.height / self.batch) / self.max_workers}")
+        print("<-------- Scene Settings -------->")
+        print(f"Max recursions:{self.scene_settings.max_recursions}")
+        print(f"Max shadow rays:{self.scene_settings.root_number_shadow_rays}")
         print("<-------------------------------->\n")
 
     def create_scene_batch(self) -> np.array:
@@ -99,6 +104,7 @@ class BatchedSceneBuilder:
             pixel_dir = normalize(point_on_screen - self.camera.position)
             ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position,self.scene_settings.max_recursions,self.scene_settings.root_number_shadow_rays)
             data.append(ray.shoot(self.objects, self.lights, self.materials)[1])
+
         return data, (s, e)
 
     # https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-7-adaptive-tessellation-subdivision-surfaces#:~:text=Adaptive%20Subdivision&text=Instead%20of%20blindly%20subdividing%20a,the%20more%20it%20gets%20subdivided.
