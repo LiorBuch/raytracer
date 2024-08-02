@@ -36,7 +36,7 @@ class Ray:
                 # Assuming that each hit object has another distance - maybe should change in the future
                 options[distance] = (obj, pos)
         if 0 == len(options.keys()):
-            return self.pixel_coords, (0, 0, 0)
+            return self.pixel_coords, np.array([0.0, 0.0, 0.0])
 
         minimizer = options[min(options.keys())]
         hit_obj = minimizer[0]
@@ -62,15 +62,19 @@ class Ray:
                 self.specular_color(normal, light_dir, -self.direction, obj_mat.shininess, light.color,
                                     obj_mat.specular_color,
                                     light.specular_intensity))
-            reflective_color = np.array([0.0,0.0,0.0])
-            if(self.max_recursions > 0):
-                reflect_ray = Ray(self.pixel_coords[0],self.pixel_coords[1],self.reflect(self.direction,normal),hit_pos,0,self.max_shadow_rays)
-                reflective_color += np.array(reflect_ray.shoot(objects, lights, materials)[1])
+            reflective_color = np.array([0.0, 0.0, 0.0])
             shadow_factor = self.calculate_soft_shadows(hit_pos, light.position, light.radius, self.max_shadow_rays,
                                                         objects, min(options.keys()), light.shadow_intensity)
             shadow_factor /= max_lights
             total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
-                    diffusive_color + specular_color) * (1 - obj_mat.transparency) + (reflective_color*obj_mat.reflection_color) #TODO how to get the correct color for reflection
+                    diffusive_color + specular_color) * (
+                                       1 - obj_mat.transparency)  # TODO how to get the correct color for reflection
+            if (self.max_recursions > 0 and np.sum(obj_mat.reflection_color) != 0):
+                reflect_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], self.reflect(self.direction, normal),
+                                  hit_pos, 0, self.max_shadow_rays)
+                reflective_color += np.array(reflect_ray.shoot(objects, lights, materials)[1])
+                total_color += reflective_color * obj_mat.reflection_color
+            return self.pixel_coords, total_color
 
         # continue to the next ray if needed
         total_color = np.clip(total_color, 0, 1) * 255
@@ -103,7 +107,7 @@ class Ray:
         color = intensity * light_color * mat_diffuse_color
         return color
 
-    def reflect(self,incident, normal):
+    def reflect(self, incident, normal):
         return incident - 2 * np.dot(normal, incident) * normal
 
     def specular_color(self, normal, light_dir, view, phong, light_color, mat_spec, light_spec_intensity):
