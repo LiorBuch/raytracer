@@ -12,7 +12,7 @@ from surfaces.sphere import Sphere
 
 
 class Ray:
-    def __init__(self, x, y, direction, start_position, max_rec, max_shadow):
+    def __init__(self, x, y, direction, start_position, max_rec, max_shadow,camera_pos):
         self.ref_obj = None
         self.sub = None  # secondary ray if glass
         self.hit_coords = []  # on scene hit
@@ -21,6 +21,7 @@ class Ray:
         self.pos = start_position  # rays start location
         self.max_shadow_rays = int(max_shadow)
         self.max_recursions = max_rec
+        self.camera_pos = camera_pos
 
     def shoot(self, objects: List[Shape], lights: List[Light], materials: List[Material]):
         """
@@ -58,13 +59,14 @@ class Ray:
 
             diffusive_color = np.array(self.diffuse_color(normal, light_dir, light.color, obj_mat.diffuse_color))
             specular_color = np.array(
-                self.specular_color(normal, light_dir, -self.direction, obj_mat.shininess, light.color,
+                self.specular_color(normal, light_dir, self.normalize(self.camera_pos - hit_pos), obj_mat.shininess,
                                     obj_mat.specular_color,
                                     light.specular_intensity))
             ambient_color = np.array(self.ambient(shadow_factor, obj_mat.diffuse_color, light.color))
-
-            total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
-                            diffusive_color + specular_color) * (1 - obj_mat.transparency)
+            ambient_color *= 0.1
+            total_color += specular_color * shadow_factor
+            """            total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
+                            diffusive_color + specular_color) * (1 - obj_mat.transparency)"""
 
         # continue to the next ray if needed
         total_color = np.clip(total_color, 0, 1) * 255
@@ -96,23 +98,15 @@ class Ray:
         return intensity * diffuse_color * light_color
 
     def diffuse_color(self, normal, light_dir, light_color, mat_diffuse_color):
-        normal = self.normalize(normal)
         light_dir = self.normalize(light_dir)
-
         intensity = max(np.dot(light_dir, normal), 0)
         color = intensity * light_color * mat_diffuse_color
         return color
 
-    def specular_color(self, normal, light_dir, view, phong, light_color, mat_spec, light_spec_intensity):
-        normal = self.normalize(normal)
-        light_dir = self.normalize(light_dir)
-        view = self.normalize(view)
-
-        reflect_dir = self.normalize(2 * normal * np.dot(normal, light_dir) - light_dir)
-        intensity = max(np.dot(view, reflect_dir), 0) ** phong
-
-        specular_color = intensity * light_color * mat_spec * light_spec_intensity
-
+    def specular_color(self, normal, light_dir, view, phong, mat_spec, light_spec):
+        reflected = 2 * np.dot(normal, light_dir) * normal - light_dir
+        intensity = max(0,np.dot(self.normalize(reflected),self.normalize(view)))**phong
+        specular_color = mat_spec*intensity*light_spec
         return specular_color
 
     def calculate_soft_shadows(self, surface_point, light_position, light_radius, num_shadow_rays, objects, min_dist,

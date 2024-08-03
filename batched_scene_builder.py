@@ -102,7 +102,7 @@ class BatchedSceneBuilder:
 
             # Direction vector for the pixel
             pixel_dir = normalize(point_on_screen - self.camera.position)
-            ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position,self.scene_settings.max_recursions,self.scene_settings.root_number_shadow_rays)
+            ray: Ray = Ray(pixel_i, pixel_j, pixel_dir, self.camera.position,self.scene_settings.max_recursions,self.scene_settings.root_number_shadow_rays,self.camera.position)
             data.append(ray.shoot(self.objects, self.lights, self.materials)[1])
 
         return data, (s, e)
