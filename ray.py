@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 from typing import List
 
@@ -12,7 +14,7 @@ from surfaces.sphere import Sphere
 
 
 class Ray:
-    def __init__(self, x, y, direction, start_position, max_rec, max_shadow,camera_pos):
+    def __init__(self, x, y, direction, start_position, max_rec, max_shadow, camera_pos):
         self.ref_obj = None
         self.sub = None  # secondary ray if glass
         self.hit_coords = []  # on scene hit
@@ -41,10 +43,10 @@ class Ray:
 
         minimizer = options[min(options.keys())]
         hit_obj = minimizer[0]
-        hit_pos = minimizer[1]
+        hit_pos = np.array(minimizer[1])
         obj_mat = materials[hit_obj.material_index - 1]
         self.direction = self.pos + hit_pos
-        normal = self.get_normal(hit_obj, self.direction)
+        normal = self.get_normal(hit_obj, hit_pos)
         # process the hit here --->
         total_color = np.array([0.0, 0.0, 0.0])
         bg_color = np.array([1.0, 1.0, 1.0])
@@ -54,8 +56,7 @@ class Ray:
             light_dir = self.normalize(light.position - hit_pos)
 
             shadow_factor = self.calculate_soft_shadows(hit_pos, light.position, light.radius, self.max_shadow_rays,
-                                                        objects, min(options.keys()), light.shadow_intensity)
-            shadow_factor /= max_lights
+                                                        objects, light.shadow_intensity,hit_obj)
 
             diffusive_color = np.array(self.diffuse_color(normal, light_dir, light.color, obj_mat.diffuse_color))
             specular_color = np.array(
@@ -63,12 +64,11 @@ class Ray:
                                     obj_mat.specular_color,
                                     light.specular_intensity))
             ambient_color = np.array(self.ambient(shadow_factor, obj_mat.diffuse_color, light.color))
-            ambient_color *= 0.1
-            total_color += specular_color * shadow_factor
-            """            total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
-                            diffusive_color + specular_color) * (1 - obj_mat.transparency)"""
+            total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
+                    diffusive_color + specular_color) * (1 - obj_mat.transparency)
 
         # continue to the next ray if needed
+        total_color /= max_lights
         total_color = np.clip(total_color, 0, 1) * 255
         return self.pixel_coords, total_color
 
@@ -105,12 +105,12 @@ class Ray:
 
     def specular_color(self, normal, light_dir, view, phong, mat_spec, light_spec):
         reflected = 2 * np.dot(normal, light_dir) * normal - light_dir
-        intensity = max(0,np.dot(self.normalize(reflected),self.normalize(view)))**phong
-        specular_color = mat_spec*intensity*light_spec
+        intensity = max(0, np.dot(self.normalize(reflected), self.normalize(view))) ** (phong)
+        specular_color = mat_spec * intensity * light_spec
         return specular_color
 
-    def calculate_soft_shadows(self, surface_point, light_position, light_radius, num_shadow_rays, objects, min_dist,
-                               shadow_intensity):
+    def calculate_soft_shadows_old(self, surface_point, light_position, light_radius, num_shadow_rays, objects,
+                                   shadow_intensity,test_obj):
 
         x_plane = np.random.randn(3)
         dir_to_light_center = self.normalize(light_position - surface_point)
@@ -133,18 +133,42 @@ class Ray:
         light_dir_list = light_to_surface.tolist()
         hit_rays_count = 0
         for point, light_dir in zip(light_list, light_dir_list):
-            if self.light_hit(objects, min_dist, np.array(point), self.normalize(light_dir)):
+            if self.light_hit(objects, np.array(point), self.normalize(light_dir),test_obj):
                 hit_rays_count += 1
 
+        if hit_rays_count != 5:
+            print(hit_rays_count)
+
         light_intensity = (1 - shadow_intensity) + shadow_intensity * (hit_rays_count / num_shadow_rays)
+
         return light_intensity
 
-    def light_hit(self, objects, min_dist, start_point, direction):
+    def calculate_soft_shadows(self, surface_point, light_position, light_radius, num_shadow_rays, objects,
+                               shadow_intensity,test_obj):
+        rand_v = np.random.randn(3)
+        dir_to_light_center = light_position - surface_point
+        x_plane = np.cross(dir_to_light_center, rand_v)
+        x_plane = self.normalize(x_plane)
+        y_plane = np.cross(dir_to_light_center, x_plane)
+        y_plane = self.normalize(y_plane)
+
+        shadow_rays = 0
+        grid_size = light_radius * 2 / num_shadow_rays
+        for i in range(num_shadow_rays):
+            for j in range(num_shadow_rays):
+                x = (i + random.uniform(0, 1)) * grid_size - light_radius
+                y = (j + random.uniform(0, 1)) * grid_size - light_radius
+                jittered_point = light_position + x * x_plane + y * y_plane
+                direction = jittered_point - surface_point
+                if self.light_hit(objects,surface_point,direction,test_obj):
+                    shadow_rays+=1
+        return (1 - shadow_intensity) + shadow_intensity * (shadow_rays/(num_shadow_rays**2))
+
+    def light_hit(self, objects, start_point, direction,test_obj):
         for obj in objects:
-            hit, pos = obj.get_intersection_point(np.array(start_point), np.array(direction))
-            if hit:
-                distance = np.linalg.norm(self.pos - pos)
-                if distance < min_dist:
+            if test_obj != obj:
+                hit, pos = obj.get_intersection_point(np.array(start_point), np.array(direction))
+                if hit:
                     return False
         return True
 
