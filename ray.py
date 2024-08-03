@@ -64,8 +64,9 @@ class Ray:
                                     obj_mat.specular_color,
                                     light.specular_intensity))
             ambient_color = np.array(self.ambient(shadow_factor, obj_mat.diffuse_color, light.color))
-            total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
-                    diffusive_color + specular_color) * (1 - obj_mat.transparency)
+            total_color += bg_color*shadow_factor
+            """            total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
+                    diffusive_color + specular_color) * (1 - obj_mat.transparency)"""
 
         # continue to the next ray if needed
         total_color /= max_lights
@@ -145,8 +146,12 @@ class Ray:
 
     def calculate_soft_shadows(self, surface_point, light_position, light_radius, num_shadow_rays, objects,
                                shadow_intensity,test_obj):
-        rand_v = np.random.randn(3)
         dir_to_light_center = light_position - surface_point
+        if dir_to_light_center[0] != 0 or dir_to_light_center[1] != 0:
+            rand_v = np.array([0, 0, 1])
+        else:
+            rand_v = np.array([0, 1, 0])
+
         x_plane = np.cross(dir_to_light_center, rand_v)
         x_plane = self.normalize(x_plane)
         y_plane = np.cross(dir_to_light_center, x_plane)
