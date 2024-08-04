@@ -19,7 +19,7 @@ class BatchedSceneBuilder:
 
         self.camera = camera
         self.max_workers = 20
-        self.batch = 2000
+        self.batch = 1000
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
         self.lights = [light for light in objects if isinstance(light, Light)]
@@ -73,7 +73,7 @@ class BatchedSceneBuilder:
             for future in concurrent.futures.as_completed(tasks):
                 data, (batch_s, batch_e) = future.result()
                 color = np.array(data[:])
-                img[batch_s:batch_e, :] = color
+                img[batch_s:batch_e, :] = np.clip(color, 0, 1) * 255
         img.resize((self.width, self.height, 3))
         return img
 
