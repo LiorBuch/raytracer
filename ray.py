@@ -63,13 +63,12 @@ class Ray:
                 self.specular_color(normal, light_dir, self.normalize(self.camera_pos - hit_pos), obj_mat.shininess,
                                     obj_mat.specular_color,
                                     light.specular_intensity))
-            ambient_color = np.array(self.ambient(shadow_factor, obj_mat.diffuse_color, light.color))
-            total_color += bg_color*shadow_factor
-            """            total_color += ambient_color + bg_color * obj_mat.transparency + shadow_factor * (
-                    diffusive_color + specular_color) * (1 - obj_mat.transparency)"""
+            ambient_color = np.array(self.ambient(1, obj_mat.diffuse_color, light.color))
+
+            total_color += ambient_color + (specular_color + diffusive_color) * shadow_factor
 
         # continue to the next ray if needed
-        total_color /= max_lights
+        ## total_color /= max_lights
         total_color = np.clip(total_color, 0, 1) * 255
         return self.pixel_coords, total_color
 
@@ -137,9 +136,6 @@ class Ray:
             if self.light_hit(objects, np.array(point), self.normalize(light_dir),test_obj):
                 hit_rays_count += 1
 
-        if hit_rays_count != 5:
-            print(hit_rays_count)
-
         light_intensity = (1 - shadow_intensity) + shadow_intensity * (hit_rays_count / num_shadow_rays)
 
         return light_intensity
@@ -156,7 +152,6 @@ class Ray:
         x_plane = self.normalize(x_plane)
         y_plane = np.cross(dir_to_light_center, x_plane)
         y_plane = self.normalize(y_plane)
-
         shadow_rays = 0
         grid_size = light_radius * 2 / num_shadow_rays
         for i in range(num_shadow_rays):
@@ -164,10 +159,11 @@ class Ray:
                 x = (i + random.uniform(0, 1)) * grid_size - light_radius
                 y = (j + random.uniform(0, 1)) * grid_size - light_radius
                 jittered_point = light_position + x * x_plane + y * y_plane
-                direction = jittered_point - surface_point
+                direction = self.normalize((jittered_point - surface_point))
                 if self.light_hit(objects,surface_point,direction,test_obj):
                     shadow_rays+=1
-        return (1 - shadow_intensity) + shadow_intensity * (shadow_rays/(num_shadow_rays**2))
+        hit_rate = (shadow_rays/(num_shadow_rays**2))
+        return (1 - shadow_intensity) * hit_rate
 
     def light_hit(self, objects, start_point, direction,test_obj):
         for obj in objects:
