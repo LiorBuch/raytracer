@@ -70,8 +70,8 @@ def main():
     # Parse the scene file
     t = time.time()
     camera, scene_settings, objects = parse_scene_file(args.scene_file)
-    scene = BatchedSceneBuilder(camera, scene_settings, objects)
-    image_array = scene.create_scene_batch() # np.zeros((500, 500, 3))
+    scene = BatchedSceneBuilder(camera, scene_settings, objects, args.width, args.height)
+    image_array = scene.create_scene_batch()
     print(f"total time: {time.time()-t}")
     # Save the output image
     save_image(image_array,args.output_image)

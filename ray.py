@@ -44,7 +44,8 @@ class Ray:
                     # Assuming that each hit object has another distance - maybe should change in the future
                     options[distance] = (obj, pos)
         if 0 == len(options.keys()):
-            return self.pixel_coords, np.array((1.0, 1.0, 1.0))
+            return self.pixel_coords, np.array((1.0, 1.0, 1.0))  # TODO: Change to the background
+
         minimizer = options[min(options.keys())]
         hit_obj = minimizer[0]
         hit_pos = np.array(minimizer[1])
@@ -121,38 +122,7 @@ class Ray:
     def reflect(self, vector, normal):
         vector = self.normalize(vector)
         reflected = 2 * np.dot(normal, vector) * normal - vector
-        return reflected
-
-    def calculate_soft_shadows_old(self, surface_point, light_position, light_radius, num_shadow_rays, objects,
-                                   shadow_intensity, test_obj):
-
-        x_plane = np.random.randn(3)
-        dir_to_light_center = self.normalize(light_position - surface_point)
-        x_plane -= x_plane.dot(dir_to_light_center) * dir_to_light_center
-        x_plane = self.normalize(x_plane)
-        y_plane = self.normalize(np.cross(dir_to_light_center, x_plane))
-
-        x = np.random.uniform(light_position - x_plane * light_radius, light_position + x_plane * light_radius,
-                              size=(self.max_shadow_rays, 3))
-        y = np.random.uniform(light_position - y_plane * light_radius, light_position + y_plane * light_radius,
-                              size=(self.max_shadow_rays, 3))
-        factor = np.random.uniform(0, 1, size=(self.max_shadow_rays, 1))
-        min_factor = np.ones((self.max_shadow_rays, 1)) - factor
-        x_factor = factor * x
-        y_factor = min_factor * y
-        rand_light_point = x_factor + y_factor
-        light_to_surface = rand_light_point - surface_point
-
-        light_list = rand_light_point.tolist()
-        light_dir_list = light_to_surface.tolist()
-        hit_rays_count = 0
-        for point, light_dir in zip(light_list, light_dir_list):
-            if self.light_hit(objects, np.array(point), self.normalize(light_dir), test_obj):
-                hit_rays_count += 1
-
-        light_intensity = (1 - shadow_intensity) + shadow_intensity * (hit_rays_count / num_shadow_rays)
-
-        return light_intensity
+        return self.normalize(reflected)
 
     def calculate_soft_shadows(self, surface_point, light_position, light_radius, num_shadow_rays, objects,
                                shadow_intensity, test_obj, test_obj_mat):

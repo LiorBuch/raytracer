@@ -26,8 +26,8 @@ class BatchedSceneBuilder:
         self.materials = [mat for mat in objects if isinstance(mat, Material)]
         self.voxel_grid = None
         self.pop_grid = None
-        self.width = 500  # int(self.camera.screen_width)
-        self.height = 500  # TODO figure out aspect
+        self.width = img_width
+        self.height = img_height
         self.total_pixels = self.width*self.height
         self.create_subdivision_grid()
         manager = mp.Manager()
