@@ -24,6 +24,7 @@ class Ray:
         self.max_shadow_rays = int(max_shadow)
         self.max_recursions = max_rec
         self.camera_pos = camera_pos
+        self.background_color = np.array([1.0, 1.0, 1.0])
 
     def shoot(self, objects: List[Shape], lights: List[Light], materials: List[Material], ignore=None):
         """
@@ -48,35 +49,39 @@ class Ray:
         hit_obj = minimizer[0]
         hit_pos = np.array(minimizer[1])
         obj_mat = materials[hit_obj.material_index - 1]
-        self.direction = self.normalize(self.pos + hit_pos)
+        self.direction = self.normalize(hit_pos - self.pos)  # From camera
         normal = self.get_normal(hit_obj, hit_pos)
         # process the hit here --->
         total_color = np.array([0.0, 0.0, 0.0])
-        bg_color = np.array([1.0, 1.0, 1.0])
-        max_lights = len(lights)
         for light in lights:
             light_dir = self.normalize(light.position - hit_pos)
-
             shadow_factor = self.calculate_soft_shadows(hit_pos, light.position, light.radius, self.max_shadow_rays,
-                                                        objects, light.shadow_intensity, hit_obj)
+                                                        objects, light.shadow_intensity, hit_obj, obj_mat)
 
             diffusive_color = np.array(self.diffuse_color(normal, light_dir, light.color, obj_mat.diffuse_color))
             specular_color = np.array(
-                self.specular_color(normal, light_dir, self.normalize(self.camera_pos - hit_pos), obj_mat.shininess,
+                self.specular_color(normal, light_dir, self.normalize(self.pos - hit_pos), obj_mat.shininess,
                                     obj_mat.specular_color,
-                                    light.specular_intensity))
-            ambient_color = np.array(self.ambient(1/max_lights, obj_mat.diffuse_color, light.color))
-            reflected_color = np.array([0.0, 0.0, 0.0])
-            if self.max_recursions > 0 and np.sum(obj_mat.reflection_color) != 0 :
-                next_direction = self.normalize(self.reflect(self.direction, normal))
-                next_direction = self.normalize(next_direction)
-                next_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], next_direction, hit_pos, 0,
-                               self.max_shadow_rays, self.camera_pos)
-                _,reflected_color = next_ray.shoot(objects, lights, materials, hit_obj)
-                reflected_color *= obj_mat.reflection_color
-            total_color += (ambient_color + specular_color + diffusive_color) * shadow_factor + reflected_color
+                                    light.specular_intensity, light.color))
+            total_color += (specular_color + diffusive_color) * shadow_factor * (1 - obj_mat.transparency)
 
+        if obj_mat.transparency != 0 and self.max_recursions > 0:
+            transparent_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], self.direction, hit_pos, 0,
+                                  self.max_shadow_rays, self.camera_pos)
+            _, transparent_color = transparent_ray.shoot(objects, lights, materials, hit_obj)
+            transparent_color *= obj_mat.transparency
+            total_color += transparent_color
+
+        if self.max_recursions > 0 and np.sum(obj_mat.reflection_color) != 0:
+            next_direction = self.reflect(-self.direction, normal)
+            next_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], next_direction, hit_pos, 0,
+                           self.max_shadow_rays, self.camera_pos)
+            _, reflected_color = next_ray.shoot(objects, lights, materials, hit_obj)
+            total_color += obj_mat.reflection_color * reflected_color
+
+        # total_color += background_color * obj_mat.transparency
         # continue to the next ray if needed
+        total_color = np.clip(total_color, 0, 1)
         return self.pixel_coords, total_color
 
     def get_normal(self, obj, hit_vec):
@@ -101,19 +106,16 @@ class Ray:
 
         return hit_pos, t
 
-    def ambient(self, intensity, diffuse_color, light_color):
-        return intensity * diffuse_color * light_color
-
     def diffuse_color(self, normal, light_dir, light_color, mat_diffuse_color):
         light_dir = self.normalize(light_dir)
         intensity = max(np.dot(light_dir, normal), 0)
         color = intensity * light_color * mat_diffuse_color
         return color
 
-    def specular_color(self, normal, light_dir, view, phong, mat_spec, light_spec):
+    def specular_color(self, normal, light_dir, view, phong, mat_spec, light_spec, light_color):
         reflected = 2 * np.dot(normal, light_dir) * normal - light_dir
-        intensity = max(0, np.dot(self.normalize(reflected), self.normalize(view))) ** (phong)
-        specular_color = mat_spec * intensity * light_spec
+        intensity = max(0, np.dot(self.normalize(reflected), self.normalize(view))) ** phong
+        specular_color = mat_spec * intensity * light_spec * light_color
         return specular_color
 
     def reflect(self, vector, normal):
@@ -153,7 +155,7 @@ class Ray:
         return light_intensity
 
     def calculate_soft_shadows(self, surface_point, light_position, light_radius, num_shadow_rays, objects,
-                               shadow_intensity, test_obj):
+                               shadow_intensity, test_obj, test_obj_mat):
         dir_to_light_center = light_position - surface_point
         if dir_to_light_center[0] != 0 or dir_to_light_center[1] != 0:
             rand_v = np.array([0, 0, 1])
@@ -175,7 +177,7 @@ class Ray:
                 if self.light_hit(objects, surface_point, direction, test_obj):
                     shadow_rays += 1
         hit_rate = (shadow_rays / (num_shadow_rays ** 2))
-        return (1 - shadow_intensity) * hit_rate
+        return (1 - shadow_intensity) + hit_rate * shadow_intensity
 
     def light_hit(self, objects, start_point, direction, test_obj):
         for obj in objects:
@@ -183,7 +185,7 @@ class Ray:
                 hit, pos = obj.get_intersection_point(np.array(start_point), np.array(direction))
                 if hit:
                     return False
-        return True
+        return True  # TODO Obj behind the light
 
     @staticmethod
     def normalize(v):

@@ -15,7 +15,7 @@ from material import Material
 
 
 class BatchedSceneBuilder:
-    def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list):
+    def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list,img_width,img_height):
 
         self.camera = camera
         self.max_workers = 20
@@ -86,7 +86,8 @@ class BatchedSceneBuilder:
         up_vector = normalize(np.cross(camera_dir, self.camera.up_vector))
         right_vector = normalize(np.cross(camera_dir, up_vector))
         screen_center = self.camera.position + camera_dir * self.camera.screen_distance
-        screen_height = self.camera.screen_width / 1
+        screen_height = self.camera.screen_width * (self.width/self.height)
+
 
         data = []
         for pixel_i, pixel_j in params:
