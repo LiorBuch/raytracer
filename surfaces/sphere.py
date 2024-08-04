@@ -15,8 +15,8 @@ class Sphere(Shape):
     def get_intersection_point(self, start_point,direction) -> (bool, np.array):
         # According to lecture 7, page 39
         a = 1
-        b = 2 * np.dot(direction, (start_point - self.position))
-        c = np.linalg.norm(start_point - self.position) ** 2 - self.radius ** 2
+        b = 2 * np.dot(direction, (start_point - self.position)) #TODO add max in the dot?
+        c = np.linalg.norm(start_point - self.position) ** 2 - self.radius ** 2 #TODO why self.position as C?
         det = b ** 2 - 4 * a * c
         if det < 0:
             return False, np.array([0, 0, 0])

@@ -29,6 +29,9 @@ class Ray:
         """
         Shoots the ray and returns the hit object and the hit position
         :param objects: All relevant objects that the ray may hit
+        :param lights: list of the scene lights
+        :param materials: list of the scene materials
+        :param ignore: object to ignore when searching
         :return: if the ray hit an object, tuple of hit object and the hit position. Otherwise, returns None
         """
         options = {}
@@ -40,18 +43,16 @@ class Ray:
                     # Assuming that each hit object has another distance - maybe should change in the future
                     options[distance] = (obj, pos)
         if 0 == len(options.keys()):
-            return self.pixel_coords, (1.0, 1.0, 1.0)
-
+            return self.pixel_coords, np.array((1.0, 1.0, 1.0))
         minimizer = options[min(options.keys())]
         hit_obj = minimizer[0]
         hit_pos = np.array(minimizer[1])
         obj_mat = materials[hit_obj.material_index - 1]
-        self.direction = self.pos + hit_pos
+        self.direction = self.normalize(self.pos + hit_pos)
         normal = self.get_normal(hit_obj, hit_pos)
         # process the hit here --->
         total_color = np.array([0.0, 0.0, 0.0])
         bg_color = np.array([1.0, 1.0, 1.0])
-
         max_lights = len(lights)
         for light in lights:
             light_dir = self.normalize(light.position - hit_pos)
@@ -64,15 +65,16 @@ class Ray:
                 self.specular_color(normal, light_dir, self.normalize(self.camera_pos - hit_pos), obj_mat.shininess,
                                     obj_mat.specular_color,
                                     light.specular_intensity))
-            ambient_color = np.array(self.ambient(shadow_factor, obj_mat.diffuse_color, light.color))
+            ambient_color = np.array(self.ambient(1/max_lights, obj_mat.diffuse_color, light.color))
             reflected_color = np.array([0.0, 0.0, 0.0])
-            if self.max_recursions > 0:
-                next_directions = self.reflect(self.direction, normal)
-                next_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], next_directions, hit_pos, 0,
+            if self.max_recursions > 0 and np.sum(obj_mat.reflection_color) != 0 :
+                next_direction = self.normalize(self.reflect(self.direction, normal))
+                next_direction = self.normalize(next_direction)
+                next_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], next_direction, hit_pos, 0,
                                self.max_shadow_rays, self.camera_pos)
                 _,reflected_color = next_ray.shoot(objects, lights, materials, hit_obj)
                 reflected_color *= obj_mat.reflection_color
-            total_color += ambient_color + (specular_color + diffusive_color + reflected_color) * shadow_factor
+            total_color += (ambient_color + specular_color + diffusive_color) * shadow_factor + reflected_color
 
         # continue to the next ray if needed
         return self.pixel_coords, total_color

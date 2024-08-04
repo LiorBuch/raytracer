@@ -19,7 +19,7 @@ class InfinitePlane(Shape):
         if np.dot(direction, self.normal) == 0:
             return False, np.array([0, 0, 0])
         # Since the formula of the plane is P * N = c, not P * N + c = 0
-        t = -(np.dot(start_point, self.normal) - self.offset) / (np.dot(direction, self.normal))
+        t = -(np.dot(start_point, self.normal) - self.offset) / (np.dot(direction, self.normal)) #TODO add max in the dot?
         if t < 0:
             return False, np.array([0, 0, 0])
         return True, start_point + t * direction
