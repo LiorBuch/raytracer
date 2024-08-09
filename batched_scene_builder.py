@@ -15,7 +15,7 @@ class BatchedSceneBuilder:
     def __init__(self, camera: Camera, scene_settings: SceneSettings, objects: list, img_width, img_height):
 
         self.camera = camera
-        self.max_workers = 20  # os.cpu_count()
+        self.max_workers = os.cpu_count()
         self.batch = 1000
         self.scene_settings = scene_settings
         self.objects = [obj for obj in objects if isinstance(obj, Shape)]
