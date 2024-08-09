@@ -13,21 +13,57 @@ class Cube(Shape):
         self.material_index = material_index
 
     def get_intersection_point(self, start_point,direction) -> (bool, np.array):
-        # According to ChatGPT
-        half_scale = self.scale / 2.0
+        x_c, y_c, z_c = self.position
 
-        min_bound = self.position - half_scale
-        max_bound = self.position + half_scale
+        # Calculate the bounds of the cube in each axis
+        min_x, max_x = x_c - self.scale, x_c + self.scale
+        min_y, max_y = y_c - self.scale, y_c + self.scale
+        min_z, max_z = z_c - self.scale, z_c + self.scale
 
-        t_min = (min_bound - start_point) / direction
-        t_max = (max_bound - start_point) / direction
+        x, y, z = start_point
+        dx, dy, dz = direction
 
-        t1 = np.minimum(t_min, t_max)
-        t2 = np.maximum(t_min, t_max)
+        # If the direction is 0 we can't divide by it
+        # So we will put the t_max and t_min according to x relation with the min_x and max_x.
+        # Same for y and z
+        if dx != 0:
+            t_min_x = (min_x - x) / dx
+            t_max_x = (max_x - x) / dx
+            if t_min_x > t_max_x: t_min_x, t_max_x = t_max_x, t_min_x
+        else:
+            t_min_x = -np.inf if x < min_x or x > max_x else 0
+            t_max_x = np.inf if x >= min_x and x <= max_x else 0
 
-        t_near = np.max(t1)
-        t_far = np.min(t2)
+        if dy != 0:
+            t_min_y = (min_y - y) / dy
+            t_max_y = (max_y - y) / dy
+            if t_min_y > t_max_y: t_min_y, t_max_y = t_max_y, t_min_y
+        else:
+            t_min_y = -np.inf if y < min_y or y > max_y else 0
+            t_max_y = np.inf if y >= min_y and y <= max_y else 0
 
-        if t_near <= t_far and t_far >= 0:
-            return True, np.array(start_point + t_near * direction)
-        return False, np.array([0, 0, 0])
+        if dz != 0:
+            t_min_z = (min_z - z) / dz
+            t_max_z = (max_z - z) / dz
+            if t_min_z > t_max_z: t_min_z, t_max_z = t_max_z, t_min_z
+        else:
+            t_min_z = -np.inf if z < min_z or z > max_z else 0
+            t_max_z = np.inf if z >= min_z and z <= max_z else 0
+
+        # Find the largest t_min and the smallest t_max across all slabs
+        t_enter = max(t_min_x, t_min_y, t_min_z)
+        t_exit = min(t_max_x, t_max_y, t_max_z)
+
+        # Check if there is an intersection
+        if t_enter > t_exit or t_exit < 0:
+            return False, np.array([0, 0, 0])  # No intersection
+
+        # Calculate the intersection point
+        intersection_point = np.array([
+            x + t_enter * dx,
+            y + t_enter * dy,
+            z + t_enter * dz
+        ])
+
+        return True, intersection_point
+

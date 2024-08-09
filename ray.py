@@ -1,5 +1,3 @@
-import random
-
 import numpy as np
 from typing import List
 
@@ -12,17 +10,14 @@ from surfaces.infinite_plane import InfinitePlane
 from surfaces.shape import Shape
 from surfaces.sphere import Sphere
 
-
 class Ray:
-    def __init__(self, x, y, direction, start_position, max_rec, max_shadow, camera_pos):
-        self.ref_obj = None
-        self.sub = None  # secondary ray if glass
+    def __init__(self, x, y, direction, start_position, max_rec, max_shadow, camera_pos, background_color):
         self.hit_coords = []  # on scene hit
         self.pixel_coords = (x, y)  # image pixel location
         self.direction = direction  # ray direction
         self.pos = start_position  # rays start location
         self.max_shadow_rays = int(max_shadow)
-        self.max_recursions = max_rec
+        self.max_recursions = max_rec  # max_rec
         self.camera_pos = camera_pos
         self.background_color = np.array([1.0, 1.0, 1.0])
 
@@ -67,24 +62,22 @@ class Ray:
             total_color += (specular_color + diffusive_color) * shadow_factor * (1 - obj_mat.transparency)
 
         if obj_mat.transparency != 0 and self.max_recursions > 0:
-            use,snell_dir, exit_pos = self.snells_law(self.direction, hit_pos, normal, hit_obj)
-            if use:
-                transparent_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], self.normalize(snell_dir), exit_pos,
-                                      0,
-                                      self.max_shadow_rays, self.camera_pos)
-                _, transparent_color = transparent_ray.shoot(objects, lights, materials, hit_obj)
-                transparent_color *= obj_mat.transparency
-                total_color += transparent_color
+            # Using snell's law for transparency! We decided the n as we liked.
+            snell_dir, exit_pos = self.snells_law(self.direction, hit_pos, normal, hit_obj)
+            transparent_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], self.normalize(snell_dir), exit_pos,
+                                  self.max_recursions - 1,
+                                  self.max_shadow_rays, self.camera_pos, self.background_color)
+            _, transparent_color = transparent_ray.shoot(objects, lights, materials, hit_obj)
+            transparent_color *= obj_mat.transparency
+            total_color += transparent_color
 
         if self.max_recursions > 0 and np.sum(obj_mat.reflection_color) != 0:
             next_direction = self.reflect(-self.direction, normal)
-            next_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], next_direction, hit_pos, 0,
-                           self.max_shadow_rays, self.camera_pos)
+            next_ray = Ray(self.pixel_coords[0], self.pixel_coords[1], next_direction, hit_pos, self.max_recursions - 1,
+                           self.max_shadow_rays, self.camera_pos, self.background_color)
             _, reflected_color = next_ray.shoot(objects, lights, materials, hit_obj)
             total_color += obj_mat.reflection_color * reflected_color
 
-        # total_color += background_color * obj_mat.transparency
-        # continue to the next ray if needed
         total_color = np.clip(total_color, 0, 1)
         return self.pixel_coords, total_color
 
@@ -102,8 +95,6 @@ class Ray:
 
         mu_in = air_media / glass_media
         angle_in = np.sqrt(1 - (mu_in ** 2) * (1 - np.dot(-hit_vec, normal) ** 2))
-        # if angle_in <= 0.84:
-        #     return False, hit_vec, hit_pos
         refract_in = mu_in * hit_vec + (mu_in * np.dot(-hit_vec, normal) - angle_in) * normal
 
         hit, exit_pos = obj.get_intersection_point(hit_pos - normal * 0.001, refract_in)
@@ -152,8 +143,8 @@ class Ray:
         grid_size = light_radius * 2 / num_shadow_rays
         for i in range(num_shadow_rays):
             for j in range(num_shadow_rays):
-                x = (i + random.uniform(0, 1)) * grid_size - light_radius
-                y = (j + random.uniform(0, 1)) * grid_size - light_radius
+                x = (i + np.random.uniform(0, 1)) * grid_size - light_radius
+                y = (j + np.random.uniform(0, 1)) * grid_size - light_radius
                 jittered_point = light_position + x * x_plane + y * y_plane
                 direction = self.normalize((jittered_point - surface_point))
                 hit, factor = self.light_hit(objects, surface_point, direction, test_obj, materials)
@@ -161,13 +152,18 @@ class Ray:
         hit_rate = (partly_shade / (num_shadow_rays ** 2))
         return (1 - shadow_intensity) + hit_rate * shadow_intensity
 
-    def light_hit(self, objects, start_point, direction, test_obj, materials):
+    def light_hit(self, objects, start_point, direction, test_obj, materials, dist_to_light):
+        # Searching if there is an object that blocks the light.
         for obj in objects:
             if test_obj != obj:
                 hit, pos = obj.get_intersection_point(np.array(start_point), np.array(direction))
                 if hit:
-                    return False, materials[obj.material_index].transparency
-        return True, 1  # TODO Obj behind the light
+                    # If the object we hit is behind the light, it doesn't count as hitting an object - it doesn't block the light!
+                    if dist_to_light <= np.linalg.norm(pos - start_point):
+                        pass
+                    return materials[obj.material_index - 1].transparency
+        # The ray reached the light successfully!
+        return 1
 
     @staticmethod
     def normalize(v):
