@@ -19,7 +19,7 @@ class Ray:
         self.max_shadow_rays = int(max_shadow)
         self.max_recursions = max_rec  # max_rec
         self.camera_pos = camera_pos
-        self.background_color = np.array([1.0, 1.0, 1.0])
+        self.background_color = np.array(background_color)
 
     def shoot(self, objects: List[Shape], lights: List[Light], materials: List[Material], ignore=None):
         """
@@ -36,12 +36,12 @@ class Ray:
                 hit, pos = obj.get_intersection_point(self.pos, self.direction)
                 if hit:
                     distance = np.linalg.norm(self.pos - pos)
-                    # Assuming that each hit object has another distance - maybe should change in the future
+                    # Assuming that each hit object has another distance
                     options[distance] = (obj, pos)
-        if 0 == len(options.keys()):
-            return self.pixel_coords, np.array((1.0, 1.0, 1.0))  # TODO: Change to the background
+        if 0 == len(options.keys()):  # If didn't hit any object, return the background color defined.
+            return self.pixel_coords, self.background_color
 
-        minimizer = options[min(options.keys())]
+        minimizer = options[min(options.keys())]  # The closest object
         hit_obj = minimizer[0]
         hit_pos = np.array(minimizer[1])
         obj_mat = materials[hit_obj.material_index - 1]
@@ -49,7 +49,7 @@ class Ray:
         normal = self.get_normal(hit_obj, hit_pos)
         # process the hit here --->
         total_color = np.array([0.0, 0.0, 0.0])
-        for light in lights:
+        for light in lights:  # Lets shoot rays from each light to the object and caclulate the light in that coordinate!
             light_dir = self.normalize(light.position - hit_pos)
             shadow_factor = self.calculate_soft_shadows(hit_pos, light.position, light.radius, self.max_shadow_rays,
                                                         objects, light.shadow_intensity, hit_obj, materials)
@@ -82,10 +82,11 @@ class Ray:
         return self.pixel_coords, total_color
 
     def get_normal(self, obj, hit_vec):
+        # Each object has different way to calc it's normal
         if (isinstance(obj, Sphere)):
             return self.normalize(hit_vec - obj.position)
         if (isinstance(obj, Cube)):
-            pass  # TODO implement cube hit normal
+            return obj.get_normal(hit_vec)
         if (isinstance(obj, InfinitePlane)):
             return self.normalize(obj.normal)
 
@@ -99,20 +100,19 @@ class Ray:
 
         hit, exit_pos = obj.get_intersection_point(hit_pos - normal * 0.001, refract_in)
         if not hit:
-            return True, refract_in, hit_pos
+            return refract_in, hit_pos
 
         # exit_ray
-
         mu_out = 1 / mu_in
         refract_in = self.normalize(refract_in)
         angle_out = np.sqrt(1 - (mu_out ** 2) * (1 - np.dot(-refract_in, -normal) ** 2))
         refract_out = mu_out * refract_in + (mu_out * np.dot(-refract_in, -normal) - angle_out) * normal
 
-        return True, refract_out, exit_pos
+        return refract_out, exit_pos
 
     def diffuse_color(self, normal, light_dir, light_color, mat_diffuse_color):
         light_dir = self.normalize(light_dir)
-        intensity = max(np.dot(light_dir, normal), 0)
+        intensity = max(np.dot(light_dir, normal), 0)  # So the intensity won't be negative
         color = intensity * light_color * mat_diffuse_color
         return color
 
@@ -147,7 +147,8 @@ class Ray:
                 y = (j + np.random.uniform(0, 1)) * grid_size - light_radius
                 jittered_point = light_position + x * x_plane + y * y_plane
                 direction = self.normalize((jittered_point - surface_point))
-                hit, factor = self.light_hit(objects, surface_point, direction, test_obj, materials)
+                dist_to_light = np.linalg.norm(jittered_point - surface_point)
+                factor = self.light_hit(objects, surface_point, direction, test_obj, materials, dist_to_light)
                 partly_shade += factor
         hit_rate = (partly_shade / (num_shadow_rays ** 2))
         return (1 - shadow_intensity) + hit_rate * shadow_intensity

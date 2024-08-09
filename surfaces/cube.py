@@ -67,3 +67,24 @@ class Cube(Shape):
 
         return True, intersection_point
 
+
+    def get_normal(self, hit_pos):
+        x_c, y_c, z_c = self.position  # Center coordinates
+        x, y, z = hit_pos
+
+        dx = abs(x - x_c) - self.scale
+        dy = abs(y - y_c) - self.scale
+        dz = abs(z - z_c) - self.scale
+        normal = np.array([0.0, 0.0, 0.0])
+
+        # Find the maximum distance (which slab the hit point is closest to)
+        max_dist = max(dx, dy, dz)
+
+        if np.isclose(max_dist, dx):
+            normal[0] = np.sign(x - x_c)
+        elif np.isclose(max_dist, dy):
+            normal[1] = np.sign(y - y_c)
+        elif np.isclose(max_dist, dz):
+            normal[2] = np.sign(z - z_c)
+
+        return normal
